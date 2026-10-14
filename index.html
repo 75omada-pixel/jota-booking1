@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect with Cyprus</title>
+<style>
+:root{--bg:#f6f1e7;--card:#fffdf8;--ink:#1b2a5c;--mute:#5d6584;--line:#e3dac4;--green:#2f5d34;--copper:#c8600f;--off:#e9e3d3}
+@media (prefers-color-scheme:dark){:root{--bg:#10162e;--card:#182046;--ink:#f3eedf;--mute:#a8b0d0;--line:#2b3566;--green:#7fc88a;--copper:#ffa64d;--off:#222b57}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:24px 16px 48px}
+main{max-width:720px;margin:0 auto}
+h1{font-size:2rem;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 24px}
+.block{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.time{font-weight:700;font-size:1.15rem}
+.local{color:var(--mute);font-size:.9rem;margin-bottom:12px}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+button.slot{min-height:48px;border-radius:10px;border:2px solid var(--green);background:transparent;color:var(--green);font:inherit;font-weight:600;cursor:pointer}
+button.slot:hover{background:var(--green);color:var(--card)}
+button.slot:disabled{border-color:var(--off);background:var(--off);color:var(--mute);cursor:not-allowed}
+button.slot.mine{border-color:var(--copper);color:var(--copper)}
+dialog{border:none;border-radius:14px;padding:22px;max-width:420px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.row{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+.btn{padding:10px 16px;border-radius:10px;border:2px solid var(--green);background:var(--green);color:var(--card);font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--green)}
+.err{color:var(--copper);margin-top:10px;min-height:1.2em}
+.link{display:block;word-break:break-all;margin:10px 0;font-weight:600;color:var(--copper)}
+</style>
+</head>
+<body>
+<main>
+<h1>Connect with Cyprus</h1>
+<p class="sub">JOTA-JOTI 2026 · Saturday 17 October · Online on Google Meet · Pick one 15-minute slot.</p>
+<div id="list"><p class="sub">Loading slots…</p></div>
+</main>
+
+<dialog id="dlg">
+<form id="form">
+<h2 id="dtitle" style="margin:0">Book slot</h2>
+<label for="grp">Scout group name</label>
+<input id="grp" required maxlength="80" autocomplete="organization">
+<label for="cty">Country</label>
+<input id="cty" required maxlength="60" autocomplete="country-name">
+<div class="err" id="err"></div>
+<div class="row">
+<button type="button" class="btn ghost" id="cancel">Cancel</button>
+<button type="submit" class="btn" id="go">Book</button>
+</div>
+</form>
+</dialog>
+
+<dialog id="done">
+<h2 style="margin:0">You are booked!</h2>
+<p id="dtime"></p>
+<p>Your Google Meet link (we saved it in this browser):</p>
+<a class="link" id="dlink" target="_blank" rel="noopener"></a>
+<div class="row"><button class="btn" id="close">Close</button></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://crhbghcioqwzobmomhln.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lm-jyn1w8u7DU4bKfRyT7A_6ZOk4bLS";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = id => document.getElementById(id);
+const cy = new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Nicosia"});
+const loc = new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit"});
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const range = (s,e,f) => f.format(new Date(s)) + "–" + f.format(new Date(e));
+
+function mine(){ try{ return JSON.parse(localStorage.getItem("myslots")||"{}"); }catch(e){ return {}; } }
+function saveMine(id,url){ try{ const m=mine(); m[id]=url; localStorage.setItem("myslots",JSON.stringify(m)); }catch(e){} }
+
+let slots = [], current = null;
+
+async function load(){
+  const { data, error } = await sb.from("public_slots").select("*").order("starts_at").order("id");
+  if(error){ $("list").innerHTML = '<p class="sub">Could not load slots. Please refresh.</p>'; return; }
+  slots = data; render();
+}
+
+function render(){
+  const m = mine(), groups = new Map();
+  slots.forEach(s => { if(!groups.has(s.starts_at)) groups.set(s.starts_at,[]); groups.get(s.starts_at).push(s); });
+  const list = $("list"); list.innerHTML = "";
+  groups.forEach(arr => {
+    const b = document.createElement("section"); b.className = "block";
+    const t = document.createElement("div"); t.className = "time";
+    t.textContent = range(arr[0].starts_at, arr[0].ends_at, cy) + " Cyprus time";
+    b.appendChild(t);
+    const l = document.createElement("div"); l.className = "local";
+    l.textContent = tz === "Asia/Nicosia" ? "" : "Your time: " + range(arr[0].starts_at, arr[0].ends_at, loc) + " (" + tz + ")";
+    b.appendChild(l);
+    const g = document.createElement("div"); g.className = "slots";
+    arr.forEach((s,i) => {
+      const btn = document.createElement("button"); btn.className = "slot";
+      btn.textContent = "Slot " + "ABC"[i];
+      if(m[s.id]){ btn.classList.add("mine"); btn.textContent = "Your slot"; btn.onclick = () => showDone(s, m[s.id]); }
+      else if(s.booked){ btn.disabled = true; btn.textContent = "Booked"; }
+      else btn.onclick = () => openForm(s, "Slot " + "ABC"[i]);
+      g.appendChild(btn);
+    });
+    b.appendChild(g); list.appendChild(b);
+  });
+}
+
+function openForm(s,label){
+  current = s; $("err").textContent = "";
+  $("dtitle").textContent = label + " · " + range(s.starts_at, s.ends_at, cy) + " (Cyprus)";
+  $("dlg").showModal();
+}
+function showDone(s,url){
+  $("dtime").textContent = range(s.starts_at, s.ends_at, cy) + " Cyprus time, 17 October";
+  $("dlink").href = url; $("dlink").textContent = url; $("done").showModal();
+}
+
+$("cancel").onclick = () => $("dlg").close();
+$("close").onclick = () => $("done").close();
+$("form").onsubmit = async e => {
+  e.preventDefault(); $("go").disabled = true; $("err").textContent = "";
+  const { data, error } = await sb.rpc("book_slot",{ p_id: current.id, p_group: $("grp").value, p_country: $("cty").value });
+  $("go").disabled = false;
+  if(error){
+    $("err").textContent = /slot_taken/.test(error.message) ? "Sorry, this slot was just taken. Please pick another." : "Something went wrong. Please try again.";
+    if(/slot_taken/.test(error.message)) load();
+    return;
+  }
+  saveMine(current.id, data); $("dlg").close(); await load(); showDone(current, data);
+};
+
+load(); setInterval(load, 20000);
+</script>
+</body>
+</html>
