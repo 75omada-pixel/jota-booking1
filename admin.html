@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Κρατήσεις JOTA-JOTI</title>
+<style>
+:root{--bg:#f6f1e7;--card:#fffdf8;--ink:#1b2a5c;--mute:#5d6584;--line:#e3dac4;--green:#2f5d34;--copper:#c8600f;--free:#eef3ea}
+@media (prefers-color-scheme:dark){:root{--bg:#10162e;--card:#182046;--ink:#f3eedf;--mute:#a8b0d0;--line:#2b3566;--green:#7fc88a;--copper:#ffa64d;--free:#1a2a3a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,Segoe UI,Roboto,sans-serif;padding:24px 16px 48px}
+main{max-width:900px;margin:0 auto}
+h1{font-size:1.7rem;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+input{padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit}
+.btn{padding:10px 16px;border-radius:10px;border:2px solid var(--green);background:var(--green);color:var(--card);font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--green)}
+.btn.warn{border-color:var(--copper);background:transparent;color:var(--copper);padding:6px 10px;font-size:.9rem}
+.err{color:var(--copper);min-height:1.3em;margin-top:8px}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.stat{font-weight:700}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+tr.free td{background:var(--free);color:var(--mute)}
+tr:last-child td{border-bottom:none}
+a{color:var(--copper)}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.8rem;font-weight:600;border:1px solid var(--green);color:var(--green)}
+</style>
+</head>
+<body>
+<main>
+<h1>Κρατήσεις JOTA-JOTI</h1>
+<p class="sub">17 Οκτωβρίου · ώρες Κύπρου</p>
+
+<form id="login" class="bar">
+<input id="pass" type="password" placeholder="Κωδικός" autocomplete="current-password" required>
+<button class="btn" type="submit">Είσοδος</button>
+</form>
+<div class="err" id="err"></div>
+
+<section id="panel" hidden>
+<div class="bar">
+<span class="stat" id="stat"></span>
+<button class="btn ghost" id="refresh" type="button">Ανανέωση</button>
+<button class="btn ghost" id="copy" type="button">Αντιγραφή λίστας</button>
+</div>
+<div class="wrap">
+<table>
+<thead><tr><th>Ώρα</th><th>Slot</th><th>Ομάδα</th><th>Χώρα</th><th>Έκλεισε</th><th>Meet</th><th></th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const sb = supabase.createClient("https://crhbghcioqwzobmomhln.supabase.co","sb_publishable_lm-jyn1w8u7DU4bKfRyT7A_6ZOk4bLS");
+const $ = id => document.getElementById(id);
+const hm = new Intl.DateTimeFormat("el-GR",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Nicosia"});
+const dm = new Intl.DateTimeFormat("el-GR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Nicosia"});
+let pass = "", data = [], timer = null, armed = null;
+
+async function load(){
+  const { data: d, error } = await sb.rpc("admin_bookings",{ p_pass: pass });
+  if(error){
+    if(/wrong_password/.test(error.message)){ logout("Λάθος κωδικός."); }
+    else $("err").textContent = "Σφάλμα φόρτωσης. Δοκίμασε ξανά.";
+    return false;
+  }
+  $("err").textContent = ""; data = d; render(); return true;
+}
+
+function logout(msg){
+  clearInterval(timer); pass = ""; $("panel").hidden = true; $("login").hidden = false; $("err").textContent = msg || "";
+}
+
+function cell(tr, text){ const td = document.createElement("td"); td.textContent = text; tr.appendChild(td); return td; }
+
+function render(){
+  const booked = data.filter(s => s.group_name).length;
+  $("stat").textContent = booked + " από " + data.length + " slots κλεισμένα";
+  const body = $("rows"); body.innerHTML = "";
+  data.forEach((s,i) => {
+    const tr = document.createElement("tr");
+    if(!s.group_name) tr.className = "free";
+    cell(tr, hm.format(new Date(s.starts_at)) + "–" + hm.format(new Date(s.ends_at)));
+    cell(tr, s.id.toUpperCase());
+    cell(tr, s.group_name || "ελεύθερο");
+    cell(tr, s.country || "");
+    cell(tr, s.booked_at ? dm.format(new Date(s.booked_at)) : "");
+    const m = document.createElement("td"), a = document.createElement("a");
+    a.href = s.meet_url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "σύνδεσμος"; m.appendChild(a); tr.appendChild(m);
+    const act = document.createElement("td");
+    if(s.group_name){
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn warn";
+      b.textContent = armed === s.id ? "Σίγουρα;" : "Ελευθέρωση";
+      b.onclick = async () => {
+        if(armed !== s.id){ armed = s.id; render(); return; }
+        armed = null;
+        const { error } = await sb.rpc("admin_release",{ p_pass: pass, p_id: s.id });
+        if(error) $("err").textContent = "Δεν έγινε η ελευθέρωση."; 
+        load();
+      };
+      act.appendChild(b);
+    }
+    tr.appendChild(act); body.appendChild(tr);
+  });
+}
+
+$("login").onsubmit = async e => {
+  e.preventDefault(); pass = $("pass").value;
+  if(await load()){
+    $("login").hidden = true; $("panel").hidden = false; $("pass").value = "";
+    timer = setInterval(load, 30000);
+  }
+};
+$("refresh").onclick = load;
+$("copy").onclick = async () => {
+  const txt = data.filter(s => s.group_name).map(s => hm.format(new Date(s.starts_at)) + " " + s.id.toUpperCase() + " · " + s.group_name + " (" + s.country + ")").join("\n");
+  try{ await navigator.clipboard.writeText(txt || "Καμία κράτηση ακόμα"); $("err").textContent = "Η λίστα αντιγράφηκε."; }
+  catch(e){ $("err").textContent = "Δεν μπόρεσα να αντιγράψω."; }
+};
+</script>
+</body>
+</html>
